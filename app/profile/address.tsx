@@ -1,11 +1,11 @@
-import { View, Text, StyleSheet, TextInput, Button, ActivityIndicator } from 'react-native';
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useTheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
-import { Stack } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useToast } from '@/app/context/ToastContext';
+import { Colors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
+import { Stack } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Button, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const AddressSkeleton = () => (
     <View style={styles.skeletonContainer}>
@@ -19,7 +19,7 @@ const AddressSkeleton = () => (
 export default function AddressBookPage() {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
-  const [country, setCountry] = useState('');
+  const [state, setState] = useState('');
   const [loading, setLoading] = useState(true);
   const { colorScheme } = useTheme();
   const themeColors = Colors[colorScheme ?? 'light'];
@@ -41,7 +41,7 @@ export default function AddressBookPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from('profiles')
-        .select('address, city, country')
+        .select('address, city, state')
         .eq('id', userId)
         .single();
 
@@ -50,7 +50,7 @@ export default function AddressBookPage() {
       } else if (data) {
         setAddress(data.address || '');
         setCity(data.city || '');
-        setCountry(data.country || '');
+        setState(data.state || '');
       }
       setLoading(false);
     };
@@ -65,7 +65,7 @@ export default function AddressBookPage() {
     setLoading(true);
     const { error } = await supabase
       .from('profiles')
-      .update({ address, city, country })
+      .update({ address, city, state })
       .eq('id', userId);
 
     if (error) {
@@ -98,9 +98,9 @@ export default function AddressBookPage() {
           />
           <TextInput
             style={[styles.input, { color: themeColors.text, borderColor: themeColors.border, backgroundColor: themeColors.card }]}
-            placeholder="Country"
-            value={country}
-            onChangeText={setCountry}
+            placeholder="State"
+            value={state}
+            onChangeText={setState}
           />
           <Button title="Update Address" onPress={handleUpdateAddress} color={themeColors.primary} />
         </View>
