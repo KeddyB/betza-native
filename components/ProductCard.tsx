@@ -152,7 +152,7 @@ export default function ProductCard({ product, onPress, width = defaultProductWi
             {product.name}
             </Text>
             <Text style={[styles.categoryName, { color: themeColors.text + '99' }]} numberOfLines={1}>
-            Household Equipment
+            {product.category}
             </Text>
         </View>
 
