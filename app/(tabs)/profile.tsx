@@ -1,4 +1,4 @@
-import { View, Text, Button, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, Switch, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
@@ -7,6 +7,8 @@ import { useTheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
 
 // Skeleton Loader Component
 const ProfilePageSkeleton = () => {
@@ -18,7 +20,7 @@ const ProfilePageSkeleton = () => {
                 <View style={[styles.skeletonText, { height: 24, width: 200, backgroundColor: themeColors.card, marginBottom: 32 }]} />
             </View>
             <View style={styles.menuContainer}>
-                {[...Array(4)].map((_, i) => (
+                {[...Array(5)].map((_, i) => (
                     <View key={i} style={styles.menuItem}>
                         <View style={[styles.skeletonIcon, { backgroundColor: themeColors.card }]} />
                         <View style={[styles.skeletonText, { flex: 1, height: 16, backgroundColor: themeColors.card }]} />
@@ -44,8 +46,44 @@ export default function ProfilePage() {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isFingerprintLoginEnabled, setIsFingerprintLoginEnabled] = useState(false);
 
   const themeColors = Colors[colorScheme ?? 'light'];
+
+  useEffect(() => {
+    const checkFingerprintStatus = async () => {
+      const isEnabled = await SecureStore.getItemAsync('fingerprint_login_enabled');
+      setIsFingerprintLoginEnabled(isEnabled === 'true');
+    };
+    checkFingerprintStatus();
+  }, []);
+
+  const handleFingerprintToggle = async (value: boolean) => {
+    if (value) {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      if (!hasHardware) {
+        Alert.alert('Error', 'Fingerprint scanner not available on this device.');
+        return;
+      }
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!isEnrolled) {
+        Alert.alert('Error', 'No fingerprints enrolled on this device.');
+        return;
+      }
+      const { session } = (await supabase.auth.getSession()).data;
+      if (session?.refresh_token) {
+        await SecureStore.setItemAsync('fingerprint_login_enabled', 'true');
+        await SecureStore.setItemAsync('user_refresh_token', session.refresh_token);
+        setIsFingerprintLoginEnabled(true);
+      } else {
+        Alert.alert('Error', 'Could not enable fingerprint login. Please try again.');
+      }
+    } else {
+      await SecureStore.deleteItemAsync('fingerprint_login_enabled');
+      await SecureStore.deleteItemAsync('user_refresh_token');
+      setIsFingerprintLoginEnabled(false);
+    }
+  };
 
   const fetchUserData = useCallback(async () => {
     try {
@@ -84,13 +122,15 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    await SecureStore.deleteItemAsync('fingerprint_login_enabled');
+    await SecureStore.deleteItemAsync('user_refresh_token');
     setUser(null);
     setFullName('');
     router.replace('/auth/get-started');
   };
 
   const handleLogin = () => {
-    router.push('/auth/sign-in');
+    router.push('/auth/get-started');
   };
 
   const menuItems: ProfileMenuItem[] = [
@@ -127,12 +167,22 @@ export default function ProfilePage() {
                     </View>
 
                     <View style={styles.menuContainer}>
-                    {menuItems.map((item) => (
-                        <TouchableOpacity key={item.title} style={styles.menuItem} onPress={() => router.push(item.screen as any)}>
-                        <Ionicons name={item.icon} size={24} color={themeColors.text} />
-                        <Text style={[styles.menuItemText, { color: themeColors.text }]}>{item.title}</Text>
-                        </TouchableOpacity>
-                    ))}
+                        {menuItems.map((item) => (
+                            <TouchableOpacity key={item.title} style={styles.menuItem} onPress={() => router.push(item.screen as any)}>
+                            <Ionicons name={item.icon} size={24} color={themeColors.text} />
+                            <Text style={[styles.menuItemText, { color: themeColors.text }]}>{item.title}</Text>
+                            </TouchableOpacity>
+                        ))}
+                        <View style={styles.menuItem}>
+                            <Ionicons name="finger-print-outline" size={24} color={themeColors.text} />
+                            <Text style={[styles.menuItemText, { color: themeColors.text }]}>Login with Fingerprint</Text>
+                            <Switch
+                                value={isFingerprintLoginEnabled}
+                                onValueChange={handleFingerprintToggle}
+                                trackColor={{ false: '#767577', true: themeColors.primary }}
+                                thumbColor={isFingerprintLoginEnabled ? themeColors.background : '#f4f3f4'}
+                            />
+                        </View>
                     </View>
                 </ScrollView>
                 <View style={styles.footer}>
@@ -144,7 +194,9 @@ export default function ProfilePage() {
         ) : (
             <View style={styles.loginContainer}>
                 <Text style={[styles.loginText, { color: themeColors.text}]}>Please log in to see your profile</Text>
-                <Button title="Login" onPress={handleLogin} color={themeColors.primary} />
+                <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+                    <Text style={styles.logoutButtonText}>Login</Text>
+                </TouchableOpacity>
             </View>
         )}
     </SafeAreaView>
@@ -188,9 +240,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+  loginButton: {
+    backgroundColor: '#4CAF50', // Green color
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '90%',
+    alignSelf: 'center',
+  },
   logoutButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   loginContainer: {

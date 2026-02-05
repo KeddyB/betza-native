@@ -8,6 +8,8 @@ import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '@/constants/theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -15,7 +17,44 @@ export default function GetStartedScreen() {
   const router = useRouter();
   const { colorScheme } = useTheme();
   const [loading, setLoading] = useState(false);
+  const [isFingerprintAvailable, setIsFingerprintAvailable] = useState(false);
   const themeColors = Colors[colorScheme ?? 'light'];
+
+  useEffect(() => {
+    const checkFingerprint = async () => {
+      const isEnabled = await SecureStore.getItemAsync('fingerprint_login_enabled');
+      if (isEnabled === 'true') {
+        setIsFingerprintAvailable(true);
+        handleFingerprintLogin();
+      }
+    };
+    checkFingerprint();
+  }, []);
+
+  const handleFingerprintLogin = async () => {
+    try {
+      const { success } = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Login with Fingerprint',
+      });
+
+      if (success) {
+        setLoading(true);
+        const refreshToken = await SecureStore.getItemAsync('user_refresh_token');
+        if (refreshToken) {
+          const { error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+          if (!error) {
+            router.replace('/(tabs)');
+          } else {
+            Alert.alert('Error', 'Failed to login with fingerprint. Please login manually.');
+          }
+        }
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'An error occurred during fingerprint authentication.');
+    }
+  };
 
   useEffect(() => {
     const handleDeepLink = ({ url }: { url: string }) => {
@@ -80,6 +119,18 @@ export default function GetStartedScreen() {
         </View>
 
         <View style={styles.buttonContainer}>
+          {isFingerprintAvailable && (
+            <TouchableOpacity
+              style={[styles.googleButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+              onPress={handleFingerprintLogin}
+              disabled={loading}
+            >
+              <Text style={[styles.googleButtonText, { color: themeColors.text }]}>
+                Login with Fingerprint
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[
               styles.googleButton,
@@ -127,6 +178,16 @@ export default function GetStartedScreen() {
           >
             <Text style={[styles.secondaryButtonText, { color: themeColors.text }]}>
               Create Account
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryButton]}
+            onPress={() => router.replace('/(tabs)')}
+            disabled={loading}
+          >
+            <Text style={[styles.secondaryButtonText, { color: themeColors.text }]}>
+              Continue without logging in
             </Text>
           </TouchableOpacity>
         </View>
